@@ -1,0 +1,12 @@
+<library path="lib/libhaptics_controllers">
+  <class name="haptics_controllers/CartesianPoseHapticsController" type="haptics_controllers::CartesianPoseHapticsController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A controller that executes a short motion based on cartesian poses to demonstrate correct usage
+    </description>
+  </class>
+  <class name="haptics_controllers/JointPositionHapticsController" type="haptics_controllers::JointPositionHapticsController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A controller that executes a short motion based on joint positions to demonstrate correct usage
+    </description>
+  </class>
+</library>
