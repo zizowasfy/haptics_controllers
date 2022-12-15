@@ -1,0 +1,25 @@
+
+{{PLEASE DO THIS BEFORE TRYING TO BUILD REAL-TIME KERNEL v5.9.1 (RTkernel) ON UBUNTU 20.04 to save yourself some time -- 1/2 hr:
+
+1) Install these packages before building the RTkernel:
+
+sudo apt install flex
+
+sudo apt install bison
+
+sudo apt install libncurses-dev
+
+sudo apt install libelf-dev
+
+sudo apt install dwarves
+
+sudo apt install zstd
+
+2) Remove the following libraries from the root directory of the kernel sources (Don't change the dir) every time you try to rebuild 
+
+rm vmlinux-gdb.py
+
+* This is to log the errors in a txt file for easier searching for the error after the Real-Time Kernel (RTkernel) build is completed:
+
+make -j$(nproc) deb-pkg 2> error.txt
+
