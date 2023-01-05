@@ -9,6 +9,8 @@ project(haptics_controllers)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   controller_interface
+  dynamic_reconfigure
+  eigen_conversions
   franka_gripper
   franka_hw
   hardware_interface
@@ -21,6 +23,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
+find_package(Eigen3 REQUIRED)
 find_package(Franka 0.9.0 QUIET)
 if(NOT Franka_FOUND)
   find_package(Franka 0.8.0 REQUIRED)
@@ -103,6 +106,10 @@ endif()
 #   cfg/DynReconf2.cfg
 # )
 
+generate_dynamic_reconfigure_options(
+  cfg/compliance_param.cfg
+)
+
 ###################################
 ## catkin specific configuration ##
 ###################################
@@ -117,6 +124,8 @@ catkin_package(
  LIBRARIES haptics_controllers
  CATKIN_DEPENDS 
   controller_interface
+  dynamic_reconfigure
+  eigen_conversions
   franka_gripper 
   franka_hw 
   hardware_interface 
@@ -143,6 +152,7 @@ include_directories(
 add_library(${PROJECT_NAME}
   src/cartesian_pose_haptics_controller.cpp
   src/joint_position_haptics_controller.cpp
+  src/cartesian_impedance_haptics_controller.cpp
 )
 
 ## Add cmake target dependencies of the library
@@ -180,7 +190,7 @@ target_link_libraries(haptics_controllers PUBLIC
 
 target_include_directories(haptics_controllers SYSTEM PUBLIC
   ${Franka_INCLUDE_DIRS}
-  # ${EIGEN3_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
 )
 target_include_directories(haptics_controllers PUBLIC

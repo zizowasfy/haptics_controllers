@@ -82,29 +82,29 @@ void CartesianPoseHapticsController::update(const ros::Time& /* time */,
                                             const ros::Duration& period) {
   elapsed_time_ += period;
   if (update_){
-    // std::lock_guard<std::mutex> haptics_pose_mutex_lock(haptics_pose_mutex_);
+    // // std::lock_guard<std::mutex> haptics_pose_mutex_lock(haptics_pose_mutex_);
 
-    double radius = 0.10;
-    double angle = M_PI / 4 * (1 - std::cos(M_PI / 3.0 * elapsed_time_.toSec()));
-    double delta_x = radius * std::sin(angle);
-    double delta_z = radius * (std::cos(angle) - 1);
+    // double radius = 0.10;
+    // double angle = M_PI / 4 * (1 - std::cos(M_PI / 1.0 * elapsed_time_.toSec()));
+    // double delta_x = radius * std::sin(angle);
+    // double delta_z = radius * (std::cos(angle) - 1);
 
-    current_pose_ = cartesian_pose_handle_->getRobotState().O_T_EE_d;
-    std::cout << "Update: " << initial_pose_[14] << std::endl;
-    std::cout << "current_pose_: " << current_pose_[14] << std::endl;
+    // current_pose_ = cartesian_pose_handle_->getRobotState().O_T_EE_d;
+    // std::cout << "Update: " << initial_pose_[14] << std::endl;
+    // std::cout << "current_pose_: " << current_pose_[14] << std::endl;
 
-    std::array<double, 16> new_pose = initial_pose_;
-    // new_pose[12] -= delta_x;
-    new_pose[14] -= delta_z;
-    cartesian_pose_handle_->setCommand(new_pose);
-    std::cout << delta_z << std::endl;
+    // std::array<double, 16> new_pose = initial_pose_;
+    // // new_pose[12] -= delta_x;
+    // new_pose[14] -= delta_z;
+    // cartesian_pose_handle_->setCommand(new_pose);
+    // std::cout << delta_z << std::endl;
 
-    // if (std::abs((initial_pose_[14]+radius) - (current_pose_[14])) < 0.001) {
-    //   update_ = false;
-    //   std::cout << "Desired Pose REACHED !! " << std::endl;
-    //   }
+    // // if (std::abs((initial_pose_[14]+radius) - (current_pose_[14])) < 0.001) {
+    // //   update_ = false;
+    // //   std::cout << "Desired Pose REACHED !! " << std::endl;
+    // //   }
 
-    if (elapsed_time_.toSec() > 5) {update_ = false;}
+    // if (elapsed_time_.toSec() > 5) {update_ = false;}
 
     
 
@@ -113,31 +113,29 @@ void CartesianPoseHapticsController::update(const ros::Time& /* time */,
     // cartesian_pose_handle_->setCommand(new_pose);
 
 
-    // current_pose_ = cartesian_pose_handle_->getRobotState().O_T_EE_d;
-
-    // std::array<double, 16> new_pose = initial_pose_;
-    // double m = ((initial_pose_[14]+haptics_deltapose_goal) - (initial_pose_[14])) / (1.0);
-
-    // // double angle = M_PI / 4 * (1 - std::cos(M_PI / 5.0 * elapsed_time_.toSec()));
-    // // double delta_z = haptics_deltapose_goal * std::sin(angle);
+    current_pose_ = cartesian_pose_handle_->getRobotState().O_T_EE_d;
+    std::array<double, 16> new_pose = initial_pose_;
+    double m = ((initial_pose_[14]+haptics_deltapose_goal) - (initial_pose_[14])) / (1);
 
 
-    // if (std::abs((initial_pose_[14]+haptics_deltapose_goal) - (current_pose_[14])) > 0.001){
-    // // if (elapsed_time_.toSec() < 5){
-    //   haptics_deltapose_step = m * elapsed_time_.toSec(); // + initial_pose_[14];  // Y = mX + c
-    //   new_pose[14] += haptics_deltapose_step;
-    //   cartesian_pose_handle_->setCommand(new_pose);
-    //   std::cout << " ALMOST THERE !" << std::endl;
-    //   std::cout << "haptics_deltapose_step: " << haptics_deltapose_step << std::endl;
-    //   std::cout << "current_pose_: " << current_pose_[14] << std::endl;
+    if (std::abs((initial_pose_[14]+haptics_deltapose_goal) - (current_pose_[14])) > 0.001){
+    // if (elapsed_time_.toSec() < 5){
+      // haptics_deltapose_step = m * elapsed_time_.toSec(); // + initial_pose_[14];  // Y = mX + c
+      haptics_deltapose_step = 1 / (1 + std::exp(-(elapsed_time_.toSec()-2))); 
+      new_pose[14] += haptics_deltapose_step;
+      cartesian_pose_handle_->setCommand(new_pose);
+      std::cout << " ALMOST THERE !" << std::endl;
+      std::cout << "haptics_deltapose_step: " << haptics_deltapose_step << std::endl;
+      std::cout << "current_pose_: " << current_pose_[14] << std::endl;
 
-    //   // ros::Duration(0.5).sleep();
-    // }
-    // else {
-    //   // initial_pose_ = new_pose;
-    //   std::cout << "Desired Pose REACHED !! " << std::endl;
-    //   update_ = false;
-    // }   
+      // // ros::Duration(0.5).sleep();
+    }
+    else {
+      initial_pose_ = new_pose;
+      std::cout << "Desired Pose REACHED !! " << std::endl;
+      update_ = false;
+    }   
+    
  
   }
 
@@ -145,7 +143,8 @@ void CartesianPoseHapticsController::update(const ros::Time& /* time */,
 
 void CartesianPoseHapticsController::hapticsPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg){
   // std::lock_guard<std::mutex> haptics_pose_mutex_lock(haptics_pose_mutex_);
-  haptics_pose_cmd = msg->pose.position.z/1000;
+  haptics_pose_cmd = msg->pose.position.z;
+  update_ = true;
 }
 }  // namespace franka_example_controllers
 

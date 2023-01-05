@@ -69,16 +69,20 @@ void JointPositionHapticsController::update(const ros::Time& /*time*/,
                                             const ros::Duration& period) {
   elapsed_time_ += period;
 
+  if(update_){
   double delta_angle = M_PI / 16 * (1 - std::cos(M_PI / 5.0 * elapsed_time_.toSec())) * 0.2;
   for (size_t i = 0; i < 7; ++i) {
     if (i == 4) {
-      position_joint_handles_[i].setCommand(initial_pose_[i] - delta_angle - haptics_jointPos_cmd);
+      position_joint_handles_[i].setCommand(initial_pose_[i] - delta_angle);
     } else {
-      position_joint_handles_[i].setCommand(initial_pose_[i] + delta_angle + haptics_jointPos_cmd);
+      position_joint_handles_[i].setCommand(initial_pose_[i] + delta_angle);
     }
+    if (elapsed_time_.toSec() > 5) {update_ = false;}
   }
   // haptics_jointPos_cmd = 0.0;
-}
+  }
+
+  }
 
 void JointPositionHapticsController::hapticsJointCallback(const std_msgs::Float32& msg){
   haptics_jointPos_cmd = msg.data;

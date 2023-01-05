@@ -9,4 +9,9 @@
       A controller that executes a short motion based on joint positions to demonstrate correct usage
     </description>
   </class>
+  <class name="haptics_controllers/CartesianImpedanceHapticsController" type="haptics_controllers::CartesianImpedanceHapticsController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A controller that executes a short motion based on cartesian position control with cartesian impedance set to demonstrate correct usage
+    </description>
+  </class>
 </library>

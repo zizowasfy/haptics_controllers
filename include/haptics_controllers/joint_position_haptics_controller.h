@@ -28,6 +28,8 @@ class JointPositionHapticsController : public controller_interface::MultiInterfa
   ros::Duration elapsed_time_;
   std::array<double, 7> initial_pose_{};
   
+  bool update_ = true;
+
   double haptics_jointPos_cmd = 0.0;
   ros::Subscriber haptics_joint_sub;
   void hapticsJointCallback(const std_msgs::Float32& msg);

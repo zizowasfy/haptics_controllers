@@ -35,7 +35,7 @@ class CartesianPoseHapticsController
 
   // std::mutex haptics_pose_mutex_;
   bool update_ = true;
-  double haptics_deltapose_goal = -0.01;
+  double haptics_deltapose_goal = 0.02;
   double haptics_deltapose_step = 0.0;
   double haptics_pose_cmd = 0.0;
   std::array<double, 16> current_pose_{}; ;
