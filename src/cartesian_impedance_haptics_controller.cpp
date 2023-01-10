@@ -101,11 +101,12 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
   position_d_.setZero();
   orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
   position_d_target_.setZero();
-  delta_position.setZero();
   orientation_d_target_.coeffs() << 0.0, 0.0, 0.0, 1.0;
 
   cartesian_stiffness_.setZero();
   cartesian_damping_.setZero();
+
+  pose_feedback_pub_.init(node_handle, "/robot_ee_cartesianpose",100); // initializing the realtime publisher
 
   return true;
 }
@@ -206,6 +207,15 @@ void CartesianImpedanceHapticsController::update(const ros::Time& /*time*/,
   // position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
   position_d_ = filter_params_ * (position_d_target_) + (1.0 - filter_params_) * position_d_;  // adding delta position
   orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
+
+  if (pose_feedback_pub_.trylock()){
+    orientation_d_.normalize();
+    pose_feedback_pub_.msg_.pose.orientation.x = orientation_d_.x();
+    pose_feedback_pub_.msg_.pose.orientation.y = orientation_d_.y();
+    pose_feedback_pub_.msg_.pose.orientation.z = orientation_d_.z();
+    pose_feedback_pub_.msg_.pose.orientation.w = orientation_d_.w();
+    pose_feedback_pub_.unlockAndPublish();
+  }
 }
 
 Eigen::Matrix<double, 7, 1> CartesianImpedanceHapticsController::saturateTorqueRate(
@@ -241,17 +251,21 @@ void CartesianImpedanceHapticsController::equilibriumPoseCallback(
     const geometry_msgs::PoseStampedConstPtr& msg) {
   std::lock_guard<std::mutex> position_d_target_mutex_lock(
       position_and_orientation_d_target_mutex_);
-  delta_position << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z; // receiving the delta position
+  // delta_position << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z; // receiving the delta position
 
-  position_d_target_ += Eigen::Vector3d{msg->pose.position.x, msg->pose.position.y, msg->pose.position.z};
-
+  position_d_target_ += Eigen::Vector3d{msg->pose.position.x, msg->pose.position.y, msg->pose.position.z}; // incrementing the delta position
   // position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
-  // Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
-  // orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
-  //     msg->pose.orientation.z, msg->pose.orientation.w;
-  // if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
-  //   orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
-  // }
+
+  Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
+  orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
+      msg->pose.orientation.z, msg->pose.orientation.w;
+
+  orientation_d_target_ = orientation_d_target_ * orientation_d_;   // Quaternionmultiplying the delta quaternion by 
+                                                                   // current quaternion to get the new orientation quaternion
+
+  if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
+    orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
+  }
 }
 
 }  // namespace haptics_controllers

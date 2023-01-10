@@ -15,6 +15,7 @@
 #include <ros/node_handle.h>
 #include <ros/time.h>
 #include <Eigen/Dense>
+#include <realtime_tools/realtime_publisher.h>
 
 #include <haptics_controllers/compliance_paramConfig.h>
 #include <franka_hw/franka_model_interface.h>
@@ -56,7 +57,7 @@ class CartesianImpedanceHapticsController : public controller_interface::MultiIn
   Eigen::Vector3d position_d_target_;
   Eigen::Quaterniond orientation_d_target_;
   
-  Eigen::Vector3d delta_position;
+  realtime_tools::RealtimePublisher<geometry_msgs::PoseStamped> pose_feedback_pub_;
 
 
   // Dynamic reconfigure
