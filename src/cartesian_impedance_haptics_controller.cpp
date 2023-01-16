@@ -12,6 +12,7 @@
 
 #include <haptics_controllers/pseudo_inversion.h>
 
+
 namespace haptics_controllers {
 
 bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robot_hw,
@@ -26,6 +27,15 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
   sub_equilibrium_pose_ = node_handle.subscribe(
       "/touch_teleop_deltapose", 20, &CartesianImpedanceHapticsController::equilibriumPoseCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());      
+
+  sub_gripper_ = node_handle.subscribe(
+      "/haptics_Gripper", 20, &CartesianImpedanceHapticsController::hapticsGripperCallback, this,
+      ros::TransportHints().reliable().tcpNoDelay());
+
+  // MoveClient move_client_("/franka_gripper/move", true);      
+  // StopClient stop_client_("/franka_gripper/stop", true);      
+  // move_client_ptr = &move_client_;
+  // stop_client_ptr = &stop_client_;
 
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
@@ -107,6 +117,10 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
   cartesian_damping_.setZero();
 
   pose_feedback_pub_.init(node_handle, "/robot_ee_cartesianpose",100); // initializing the realtime publisher
+  
+  gripper_action_pub = node_handle.advertise<franka_gripper::MoveActionGoal>("/franka_gripper/move/goal",1);
+  gripper_stop_pub = node_handle.advertise<franka_gripper::StopActionGoal>("/franka_gripper/stop/goal",1);
+  gripper_grasp_pub = node_handle.advertise<franka_gripper::GraspActionGoal>("/franka_gripper/grasp/goal",1);
 
   return true;
 }
@@ -130,6 +144,8 @@ void CartesianImpedanceHapticsController::starting(const ros::Time& /*time*/) {
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
+
+  gripper_goal.goal.width = 0.0;
 }
 
 void CartesianImpedanceHapticsController::update(const ros::Time& /*time*/,
@@ -216,6 +232,66 @@ void CartesianImpedanceHapticsController::update(const ros::Time& /*time*/,
     pose_feedback_pub_.msg_.pose.orientation.w = orientation_d_.w();
     pose_feedback_pub_.unlockAndPublish();
   }
+
+  // SENDING on the ACTIONGOAL topic to open/close the gripper
+  // franka_gripper::MoveGoal gripper_goal;
+  // if (gripper_state && gripper_goal.goal.width == 0.0) // True = Opens
+  // {
+  //   // gripper_stop_pub.publish(gripper_stop);
+  //   gripper_goal.goal.speed = 0.1;
+  //   gripper_goal.goal.width = 0.07;
+  //   gripper_action_pub.publish(gripper_goal);
+    
+  //   ROS_INFO_STREAM("Gripper Opened");
+  // }
+  // else if (!gripper_state && gripper_goal.goal.width == 0.07)
+  // {  // gripper_goal.goal.width = 0.0;
+  //   // gripper_action_pub.publish(gripper_goal);
+  //   gripper_goal.goal.width = 0.07;
+  //   gripper_grasp.goal.width = 0.0;
+  //   gripper_grasp.goal.speed = 0.1;
+  //   gripper_grasp.goal.force = 1.0;
+  //   gripper_grasp.goal.epsilon.inner = 0.02;
+  //   gripper_grasp.goal.epsilon.outer = 0.02;
+
+  //   gripper_grasp_pub.publish(gripper_grasp);
+  //   ROS_INFO_STREAM("Gripper Closed");
+  // }
+  // \ SENDING on the ACTIONGOAL topic to open/close the gripper
+
+  //  // TRYING to USE the ACTIONLIB to open/close the gripper
+  // move_client_("/franka_gripper/move", true);
+  // stop_client_("/franka_gripper/stop", true);
+  // ROS_INFO_STREAM(gripper_state);
+
+  // if (gripper_state){
+  //     // Open gripper
+  //   ROS_INFO_STREAM("gripper Opened");
+  //   franka_gripper::MoveGoal move_goal;
+  //   move_goal.speed = 0.1;
+  //   move_goal.width = 0.01;
+  //   move_client_ptr->sendGoal(move_goal);
+  //   std::cout << "GOAL SENT" << std::endl;
+  //   if (move_client_ptr->waitForResult(ros::Duration(5.0))) {
+  //     gripper_state = false;
+  //   }
+  // }
+  //   } else {
+  //   ROS_INFO_STREAM("gripper Closed");
+  //         // Close gripper
+  //   franka_gripper::MoveGoal move_goal;
+  //   move_goal.speed = 0.1;
+  //   move_goal.width = 0.05;
+  //   move_client_ptr->sendGoal(move_goal);
+  //   // if (move_client_ptr->waitForResult(ros::Duration(5.0))) {
+  //   //   gripper_state = true;
+  //   // } else {
+  //   //   ROS_ERROR("haptics_gripper_node: MoveAction was not successful.");
+  //   //   stop_client_ptr->sendGoal(franka_gripper::StopGoal());
+  //   // }
+  // }
+  // // \ TRYING to USE the ACTIONLIB to open/close the gripper
+
 }
 
 Eigen::Matrix<double, 7, 1> CartesianImpedanceHapticsController::saturateTorqueRate(
@@ -231,8 +307,9 @@ Eigen::Matrix<double, 7, 1> CartesianImpedanceHapticsController::saturateTorqueR
 }
 
 void CartesianImpedanceHapticsController::complianceParamCallback(
-    haptics_controllers::compliance_paramConfig& config,
-    uint32_t /*level*/) {
+    haptics_controllers::compliance_paramConfig &config,
+    uint32_t /*level*/)
+{
   cartesian_stiffness_target_.setIdentity();
   cartesian_stiffness_target_.topLeftCorner(3, 3)
       << config.translational_stiffness * Eigen::Matrix3d::Identity();
@@ -265,6 +342,30 @@ void CartesianImpedanceHapticsController::equilibriumPoseCallback(
 
   if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
+  }
+}
+
+void CartesianImpedanceHapticsController::hapticsGripperCallback(const std_msgs::Bool msg){
+  gripper_state = msg.data;
+  if (gripper_state)
+  {
+    // gripper_stop_pub.publish(gripper_stop);
+    gripper_goal.goal.speed = 0.1;
+    gripper_goal.goal.width = 0.07;
+    gripper_action_pub.publish(gripper_goal);
+    
+    ROS_INFO_STREAM("Gripper Opened");
+  }
+  else
+  {
+    gripper_grasp.goal.width = 0.0;
+    gripper_grasp.goal.speed = 0.1;
+    gripper_grasp.goal.force = 1.0;
+    gripper_grasp.goal.epsilon.inner = 0.02;
+    gripper_grasp.goal.epsilon.outer = 0.02;
+
+    gripper_grasp_pub.publish(gripper_grasp);
+    ROS_INFO_STREAM("Gripper Closed");
   }
 }
 

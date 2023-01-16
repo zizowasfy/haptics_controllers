@@ -21,6 +21,23 @@
 #include <franka_hw/franka_model_interface.h>
 #include <franka_hw/franka_state_interface.h>
 
+#include <std_msgs/Bool.h>
+#include <franka/gripper.h>
+#include <franka_gripper/GraspAction.h>
+#include <franka_gripper/HomingAction.h>
+#include <franka_gripper/MoveAction.h>
+#include <franka_gripper/StopAction.h>
+#include <actionlib/client/simple_action_client.h>
+
+using franka_gripper::GraspAction;
+using franka_gripper::HomingAction;
+using franka_gripper::MoveAction;
+using franka_gripper::StopAction;
+using GraspClient = actionlib::SimpleActionClient<GraspAction>;
+using HomingClient = actionlib::SimpleActionClient<HomingAction>;
+using MoveClient = actionlib::SimpleActionClient<MoveAction>;
+using StopClient = actionlib::SimpleActionClient<StopAction>;
+
 namespace haptics_controllers {
 
 class CartesianImpedanceHapticsController : public controller_interface::MultiInterfaceController<
@@ -59,6 +76,16 @@ class CartesianImpedanceHapticsController : public controller_interface::MultiIn
   
   realtime_tools::RealtimePublisher<geometry_msgs::PoseStamped> pose_feedback_pub_;
 
+  ros::Publisher gripper_action_pub, gripper_stop_pub, gripper_grasp_pub;
+  franka_gripper::MoveActionGoal gripper_goal;
+  franka_gripper::StopActionGoal gripper_stop;
+  franka_gripper::GraspActionGoal gripper_grasp;
+
+  bool gripper_state = false;
+  MoveClient* move_client_ptr;
+  StopClient* stop_client_ptr;      
+  ros::Subscriber sub_gripper_;
+  void hapticsGripperCallback(const std_msgs::Bool msg);
 
   // Dynamic reconfigure
   std::unique_ptr<dynamic_reconfigure::Server<haptics_controllers::compliance_paramConfig>>
