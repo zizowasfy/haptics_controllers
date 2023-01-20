@@ -339,7 +339,7 @@ void CartesianImpedanceHapticsController::equilibriumPoseCallback(
 
   orientation_d_target_ = orientation_d_target_ * orientation_d_;   // Quaternionmultiplying the delta quaternion by 
                                                                    // current quaternion to get the new orientation quaternion
-
+   
   if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
   }
@@ -360,9 +360,9 @@ void CartesianImpedanceHapticsController::hapticsGripperCallback(const std_msgs:
   {
     gripper_grasp.goal.width = 0.0;
     gripper_grasp.goal.speed = 0.1;
-    gripper_grasp.goal.force = 1.0;
-    gripper_grasp.goal.epsilon.inner = 0.02;
-    gripper_grasp.goal.epsilon.outer = 0.02;
+    gripper_grasp.goal.force = 60.0;
+    gripper_grasp.goal.epsilon.inner = 0.03;
+    gripper_grasp.goal.epsilon.outer = 0.03;
 
     gripper_grasp_pub.publish(gripper_grasp);
     ROS_INFO_STREAM("Gripper Closed");
