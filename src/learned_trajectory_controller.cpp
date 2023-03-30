@@ -1,6 +1,6 @@
 // Copyright (c) 2017 Franka Emika GmbH
 // Use of this source code is governed by the Apache-2.0 license, see LICENSE
-#include <haptics_controllers/cartesian_impedance_haptics_controller.h>
+#include <haptics_controllers/learned_trajectory_controller.h>
 
 #include <cmath>
 #include <memory>
@@ -15,37 +15,37 @@
 
 namespace haptics_controllers {
 
-bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robot_hw,
+bool LearnedTrajectoryController::init(hardware_interface::RobotHW* robot_hw,
                                                ros::NodeHandle& node_handle) {
   std::vector<double> cartesian_stiffness_vector;
   std::vector<double> cartesian_damping_vector;
 
   // sub_equilibrium_pose_ = node_handle.subscribe(
-  //     "equilibrium_pose", 20, &CartesianImpedanceHapticsController::equilibriumPoseCallback, this,
+  //     "equilibrium_pose", 20, &LearnedTrajectoryController::equilibriumPoseCallback, this,
   //     ros::TransportHints().reliable().tcpNoDelay());      
 
   sub_equilibrium_pose_ = node_handle.subscribe(
-      "/touch_teleop_deltapose", 20, &CartesianImpedanceHapticsController::equilibriumPoseCallback, this,
+      "equilibrium_pose", 20, &LearnedTrajectoryController::equilibriumPoseCallback, this,
+      ros::TransportHints().reliable().tcpNoDelay());
+
+  sub_learned_pose_ = node_handle.subscribe(
+      "/gmm/learned_pose", 20, &LearnedTrajectoryController::learnedPoseCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());      
 
   sub_gripper_ = node_handle.subscribe(
-      "/haptics_Gripper", 20, &CartesianImpedanceHapticsController::hapticsGripperCallback, this,
+      "/haptics_Gripper", 20, &LearnedTrajectoryController::hapticsGripperCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
 
-  // MoveClient move_client_("/franka_gripper/move", true);      
-  // StopClient stop_client_("/franka_gripper/stop", true);      
-  // move_client_ptr = &move_client_;
-  // stop_client_ptr = &stop_client_;
 
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
-    ROS_ERROR_STREAM("CartesianImpedanceHapticsController: Could not read parameter arm_id");
+    ROS_ERROR_STREAM("LearnedTrajectoryController: Could not read parameter arm_id");
     return false;
   }
   std::vector<std::string> joint_names;
   if (!node_handle.getParam("joint_names", joint_names) || joint_names.size() != 7) {
     ROS_ERROR(
-        "CartesianImpedanceHapticsController: Invalid or no joint_names parameters provided, "
+        "LearnedTrajectoryController: Invalid or no joint_names parameters provided, "
         "aborting controller init!");
     return false;
   }
@@ -53,7 +53,7 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
   auto* model_interface = robot_hw->get<franka_hw::FrankaModelInterface>();
   if (model_interface == nullptr) {
     ROS_ERROR_STREAM(
-        "CartesianImpedanceHapticsController: Error getting model interface from hardware");
+        "LearnedTrajectoryController: Error getting model interface from hardware");
     return false;
   }
   try {
@@ -61,7 +61,7 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
         model_interface->getHandle(arm_id + "_model"));
   } catch (hardware_interface::HardwareInterfaceException& ex) {
     ROS_ERROR_STREAM(
-        "CartesianImpedanceHapticsController: Exception getting model handle from interface: "
+        "LearnedTrajectoryController: Exception getting model handle from interface: "
         << ex.what());
     return false;
   }
@@ -69,7 +69,7 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
   auto* state_interface = robot_hw->get<franka_hw::FrankaStateInterface>();
   if (state_interface == nullptr) {
     ROS_ERROR_STREAM(
-        "CartesianImpedanceHapticsController: Error getting state interface from hardware");
+        "LearnedTrajectoryController: Error getting state interface from hardware");
     return false;
   }
   try {
@@ -77,7 +77,7 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
         state_interface->getHandle(arm_id + "_robot"));
   } catch (hardware_interface::HardwareInterfaceException& ex) {
     ROS_ERROR_STREAM(
-        "CartesianImpedanceHapticsController: Exception getting state handle from interface: "
+        "LearnedTrajectoryController: Exception getting state handle from interface: "
         << ex.what());
     return false;
   }
@@ -85,7 +85,7 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
   auto* effort_joint_interface = robot_hw->get<hardware_interface::EffortJointInterface>();
   if (effort_joint_interface == nullptr) {
     ROS_ERROR_STREAM(
-        "CartesianImpedanceHapticsController: Error getting effort joint interface from hardware");
+        "LearnedTrajectoryController: Error getting effort joint interface from hardware");
     return false;
   }
   for (size_t i = 0; i < 7; ++i) {
@@ -93,7 +93,7 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
       joint_handles_.push_back(effort_joint_interface->getHandle(joint_names[i]));
     } catch (const hardware_interface::HardwareInterfaceException& ex) {
       ROS_ERROR_STREAM(
-          "CartesianImpedanceHapticsController: Exception getting joint handles: " << ex.what());
+          "LearnedTrajectoryController: Exception getting joint handles: " << ex.what());
       return false;
     }
   }
@@ -106,7 +106,7 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
 
       dynamic_reconfigure_compliance_param_node_);
   dynamic_server_compliance_param_->setCallback(
-      boost::bind(&CartesianImpedanceHapticsController::complianceParamCallback, this, _1, _2));
+      boost::bind(&LearnedTrajectoryController::complianceParamCallback, this, _1, _2));
 
   position_d_.setZero();
   orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
@@ -127,7 +127,7 @@ bool CartesianImpedanceHapticsController::init(hardware_interface::RobotHW* robo
   return true;
 }
 
-void CartesianImpedanceHapticsController::starting(const ros::Time& /*time*/) {
+void LearnedTrajectoryController::starting(const ros::Time& /*time*/) {
   // compute initial velocity with jacobian and set x_attractor and q_d_nullspace
   // to initial configuration
   franka::RobotState initial_state = state_handle_->getRobotState();
@@ -150,7 +150,7 @@ void CartesianImpedanceHapticsController::starting(const ros::Time& /*time*/) {
   gripper_goal.goal.width = 0.0;
 }
 
-void CartesianImpedanceHapticsController::update(const ros::Time& /*time*/,
+void LearnedTrajectoryController::update(const ros::Time& /*time*/,
                                                  const ros::Duration& /*period*/) {
   // get state variables
   franka::RobotState robot_state = state_handle_->getRobotState();
@@ -226,8 +226,11 @@ void CartesianImpedanceHapticsController::update(const ros::Time& /*time*/,
   position_d_ = filter_params_ * (position_d_target_) + (1.0 - filter_params_) * position_d_;  // adding delta position
   orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
 
-  // Publish back the Pose of Franka for force feedback mapping
+  // Publish back the Pose of Franka for position/force feedback (haptic mapping)
   if (pose_feedback_pub_.trylock()){
+    pose_feedback_pub_.msg_.pose.position.x = 0.5502645502645548 - position_d_.x(); // 0.378316809929568 - position_d_.x()
+    pose_feedback_pub_.msg_.pose.position.y =  -0.009326424870472083 - position_d_.y(); // 0.56330071906726 - position_d_.y();
+    pose_feedback_pub_.msg_.pose.position.z = 0.08959276018099538 - position_d_.z(); // 0.2377368434391054 - position_d_.z();
     orientation_d_.normalize();
     pose_feedback_pub_.msg_.pose.orientation.x = orientation_d_.x();
     pose_feedback_pub_.msg_.pose.orientation.y = orientation_d_.y();
@@ -235,11 +238,11 @@ void CartesianImpedanceHapticsController::update(const ros::Time& /*time*/,
     pose_feedback_pub_.msg_.pose.orientation.w = orientation_d_.w();
     pose_feedback_pub_.unlockAndPublish();
   }
-  //\ Publish back the Pose of Franka for force feedback mapping
+  //\ Publish back the Pose of Franka for position/force feedback (haptic mapping)
 
 }
 
-Eigen::Matrix<double, 7, 1> CartesianImpedanceHapticsController::saturateTorqueRate(
+Eigen::Matrix<double, 7, 1> LearnedTrajectoryController::saturateTorqueRate(
     const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
     const Eigen::Matrix<double, 7, 1>& tau_J_d) {  // NOLINT (readability-identifier-naming)
   Eigen::Matrix<double, 7, 1> tau_d_saturated{};
@@ -251,7 +254,7 @@ Eigen::Matrix<double, 7, 1> CartesianImpedanceHapticsController::saturateTorqueR
   return tau_d_saturated;
 }
 
-void CartesianImpedanceHapticsController::complianceParamCallback(
+void LearnedTrajectoryController::complianceParamCallback(
     haptics_controllers::compliance_paramConfig &config,
     uint32_t /*level*/)
 {
@@ -269,7 +272,20 @@ void CartesianImpedanceHapticsController::complianceParamCallback(
   nullspace_stiffness_target_ = config.nullspace_stiffness;
 }
 
-void CartesianImpedanceHapticsController::equilibriumPoseCallback(
+void LearnedTrajectoryController::equilibriumPoseCallback(
+    const geometry_msgs::PoseStampedConstPtr& msg) {
+  std::lock_guard<std::mutex> position_d_target_mutex_lock(
+      position_and_orientation_d_target_mutex_);
+  position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
+  Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
+  orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
+      msg->pose.orientation.z, msg->pose.orientation.w;
+  if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
+    orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
+  }
+}
+
+void LearnedTrajectoryController::learnedPoseCallback(
     const geometry_msgs::PoseStampedConstPtr& msg) {
   std::lock_guard<std::mutex> position_d_target_mutex_lock(
       position_and_orientation_d_target_mutex_);
@@ -278,19 +294,15 @@ void CartesianImpedanceHapticsController::equilibriumPoseCallback(
   position_d_target_ += Eigen::Vector3d{msg->pose.position.x, msg->pose.position.y, msg->pose.position.z}; // incrementing the delta position
   // position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
 
-  Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
-  orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
-      msg->pose.orientation.z, msg->pose.orientation.w;
+  // Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
+  // orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
+  //     msg->pose.orientation.z, msg->pose.orientation.w;
 
-  orientation_d_target_ = orientation_d_target_ * orientation_d_;   // Quaternionmultiplying the delta quaternion by 
-                                                                   // current quaternion to get the new orientation quaternion
-   
-  if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
-    orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
-  }
+  // if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
+    // orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
 }
 
-void CartesianImpedanceHapticsController::hapticsGripperCallback(const std_msgs::Bool msg){
+void LearnedTrajectoryController::hapticsGripperCallback(const std_msgs::Bool msg){
   gripper_state = msg.data;
   if (gripper_state)
   {
@@ -316,5 +328,5 @@ void CartesianImpedanceHapticsController::hapticsGripperCallback(const std_msgs:
 
 }  // namespace haptics_controllers
 
-PLUGINLIB_EXPORT_CLASS(haptics_controllers::CartesianImpedanceHapticsController,
+PLUGINLIB_EXPORT_CLASS(haptics_controllers::LearnedTrajectoryController,
                        controller_interface::ControllerBase)

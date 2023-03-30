@@ -153,6 +153,7 @@ add_library(${PROJECT_NAME}
   src/cartesian_pose_haptics_controller.cpp
   src/joint_position_haptics_controller.cpp
   src/cartesian_impedance_haptics_controller.cpp
+  src/learned_trajectory_controller.cpp
 )
 
 ## Add cmake target dependencies of the library
@@ -210,7 +211,10 @@ target_include_directories(haptics_controllers PUBLIC
 #   scripts/my_python_script
 #   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 # )
-
+catkin_install_python(
+  PROGRAMS scripts/interactive_marker.py scripts/move_to_start.py scripts/dual_arm_interactive_marker.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
 # install(TARGETS ${PROJECT_NAME}_node
