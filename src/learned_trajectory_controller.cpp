@@ -228,9 +228,9 @@ void LearnedTrajectoryController::update(const ros::Time& /*time*/,
 
   // Publish back the Pose of Franka for position/force feedback (haptic mapping)
   if (pose_feedback_pub_.trylock()){
-    pose_feedback_pub_.msg_.pose.position.x = 0.5502645502645548 - position_d_.x(); // 0.378316809929568 - position_d_.x()
-    pose_feedback_pub_.msg_.pose.position.y =  -0.009326424870472083 - position_d_.y(); // 0.56330071906726 - position_d_.y();
-    pose_feedback_pub_.msg_.pose.position.z = 0.08959276018099538 - position_d_.z(); // 0.2377368434391054 - position_d_.z();
+    pose_feedback_pub_.msg_.pose.position.x = position_d_.x(); // 0.378316809929568 - position_d_.x()
+    pose_feedback_pub_.msg_.pose.position.y = position_d_.y(); // 0.56330071906726 - position_d_.y();
+    pose_feedback_pub_.msg_.pose.position.z = position_d_.z(); // 0.2377368434391054 - position_d_.z();
     orientation_d_.normalize();
     pose_feedback_pub_.msg_.pose.orientation.x = orientation_d_.x();
     pose_feedback_pub_.msg_.pose.orientation.y = orientation_d_.y();

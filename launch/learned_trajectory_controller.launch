@@ -11,5 +11,5 @@
     <param name="link_name" value="$(arg arm_id)_link0" />
     <remap from="equilibrium_pose" to="/learned_trajectory_controller/equilibrium_pose" />
   </node>
-  <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" required="false" />
+  <!-- <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" required="false" /> -->
 </launch>
