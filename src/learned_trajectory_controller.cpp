@@ -289,17 +289,22 @@ void LearnedTrajectoryController::learnedPoseCallback(
     const geometry_msgs::PoseStampedConstPtr& msg) {
   std::lock_guard<std::mutex> position_d_target_mutex_lock(
       position_and_orientation_d_target_mutex_);
-  // delta_position << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z; // receiving the delta position
 
-  position_d_target_ += Eigen::Vector3d{msg->pose.position.x, msg->pose.position.y, msg->pose.position.z}; // incrementing the delta position
-  // position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
+  if (msg->header.frame_id == "delta")
+  {
+    position_d_target_ += Eigen::Vector3d{msg->pose.position.x, msg->pose.position.y, msg->pose.position.z}; // incrementing the delta position
+  }
+  else
+  {
+    position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
 
-  // Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
-  // orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
-  //     msg->pose.orientation.z, msg->pose.orientation.w;
-
-  // if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
-    // orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
+    Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
+    orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
+        msg->pose.orientation.z, msg->pose.orientation.w;
+    if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
+      orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
+    }
+  }
 }
 
 void LearnedTrajectoryController::hapticsGripperCallback(const std_msgs::Bool msg){
