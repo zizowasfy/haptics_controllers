@@ -2,7 +2,8 @@
 <launch>
   <arg name="robot" default="panda" doc="choose your robot. Possible values: [panda, fr3]"/>
   <arg name="arm_id" default="$(arg robot)" />
-  <!-- Removed this to run it in Gazebo Simulation -->
+  <!-- <param name="use_sim_time" value="false"/> -->
+  <!-- Removed franka_control.launch to run it in Gazebo Simulation -->
   <!-- <include file="$(find franka_control)/launch/franka_control.launch" pass_all_args="true"/> -->
   <rosparam command="load" file="$(find haptics_controllers)/config/haptics_controllers.yaml" subst_value="true" />
   <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="learned_trajectory_controller"/>
@@ -12,4 +13,11 @@
     <remap from="equilibrium_pose" to="/learned_trajectory_controller/equilibrium_pose" />
   </node>
   <!-- <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" required="false" /> -->
+
+  <!-- Run the main MoveIt executable without trajectory execution (we do not have controllers configured by default) -->
+  <include file="$(find panda_moveit_config)/launch/move_group_gmm_dmp.launch" pass_all_args="true">
+    <arg name="allow_trajectory_execution" value="true" />
+    <arg name="info" value="true" />
+  </include>
+
 </launch>
