@@ -1,0 +1,25 @@
+<?xml version="1.0" ?>
+<launch>
+  <arg name="robot" default="panda" doc="choose your robot. Possible values: [panda, fr3]"/>
+  <arg name="arm_id" default="$(arg robot)" />
+  <!-- <param name="use_sim_time" value="false"/> -->
+  <!-- Removed franka_control.launch to run it in Gazebo Simulation -->
+  <!-- <include file="$(find franka_control)/launch/franka_control.launch" pass_all_args="true"/> -->
+  <!-- By default use joint position controllers -->
+  <arg name="transmission" default="position" />
+  <!-- Start ROS controllers -->
+  <include file="$(find panda_moveit_config)/launch/ros_controllers.launch" pass_all_args="true" />
+  
+  <rosparam command="load" file="$(find haptics_controllers)/config/haptics_controllers.yaml" subst_value="true" />
+  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="learned_trajectory_controller"/>
+
+  <!-- as well as MoveIt demo -->
+  <include file="$(find panda_moveit_config)/launch/demo.launch" pass_all_args="true">
+    <!-- robot description is loaded by franka_control.launch -->
+    <arg name="load_robot_description" value="false" />
+    <!-- MoveItSimpleControllerManager provides ros_control's JointTrajectory controllers
+         as well as GripperCommand actions -->
+    <arg name="moveit_controller_manager" value="simple" />
+  </include>
+
+</launch>

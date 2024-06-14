@@ -17,6 +17,11 @@
   <class name="haptics_controllers/LearnedTrajectoryController" type="haptics_controllers::LearnedTrajectoryController" base_class_type="controller_interface::ControllerBase">
     <description>
       A controller that executes a learned Trajectory set to demonstrate correct usage
-    </description>
+    </description>  
   </class>
+  <class name="haptics_controllers/GMMDMPCollisionAvoidanceController" type="haptics_controllers::GMMDMPCollisionAvoidanceController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A controller that executes the Trajectory learned from GMM-DMP while accounting for collosion avoidance with the environment (octomap)
+    </description>
+  </class>  
 </library>

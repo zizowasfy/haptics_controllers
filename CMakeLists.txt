@@ -154,6 +154,7 @@ add_library(${PROJECT_NAME}
   src/joint_position_haptics_controller.cpp
   src/cartesian_impedance_haptics_controller.cpp
   src/learned_trajectory_controller.cpp
+  src/gmm_dmp_collision_avoidance_controller.cpp
 )
 
 ## Add cmake target dependencies of the library
