@@ -40,6 +40,8 @@ bool GMMDMPCollisionAvoidanceController::init(hardware_interface::RobotHW* robot
       "/near_collision_points_visualization", 20, &GMMDMPCollisionAvoidanceController::nearCollisionCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
 
+    
+
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
     ROS_ERROR_STREAM("GMMDMPCollisionAvoidanceController: Could not read parameter arm_id");
@@ -129,6 +131,7 @@ bool GMMDMPCollisionAvoidanceController::init(hardware_interface::RobotHW* robot
 
   // debugging
   debug_pub = node_handle.advertise<std_msgs::Float32MultiArray>("/debugging_topic", 10);
+  marker_viz_pub = node_handle.advertise<visualization_msgs::Marker>("/debugging_marker_viz", 1);
   //\ debugging
 
   return true;
@@ -226,32 +229,50 @@ void GMMDMPCollisionAvoidanceController::update(const ros::Time& /*time*/,
   // // Steering Angle --------------------------------------------------------------------------------------------------------
   std::lock_guard<std::mutex> collision_mutex_lock_guard(collision_mutex);
 
-  std::array<double, 42> collision_point_jacobian_array =
+  std::array<double, 16> collision_frame_pose_array =
+                        model_handle_->getPose(collision_link_frame);
+  Eigen::Map<Eigen::Matrix<double, 4, 4>> collision_frame_pose(collision_frame_pose_array.data());
+  std::array<double, 42> collision_link_frame_jacobian_array =
                           model_handle_->getZeroJacobian(collision_link_frame);
-  Eigen::Map<Eigen::Matrix<double, 6, 7>> J_o(collision_point_jacobian_array.data());
-  Eigen::MatrixXd pinv_term;
-  pseudoInverse(J_o * (Eigen::MatrixXd::Identity(7, 7) - jacobian_pinv * jacobian), pinv_term);
+  Eigen::Map<Eigen::Matrix<double, 6, 7>> J_link(collision_link_frame_jacobian_array.data());
+
+  Eigen::Vector3d link_point_vector = robot_collision_point - collision_frame_pose.block<3,1>(0,3); // frame_pose + r_vec = robot_point 
+
+  Eigen::Matrix<double, 6, 7> J_point;
+  for (int i = 0; i < 7; i++)
+  {
+    J_point.block<3,1>(0,i) = J_link.block<3,1>(0,i) + J_link.block<3,1>(3,i).cross(collision_frame_pose.block<3,3>(0,0) * link_point_vector);
+  }
+  J_point.block<3,7>(3,0) = J_link.block<3,7>(3,0);
+  Eigen::MatrixXd J_point_pinv, J_point_transpose_pinv;
+  pseudoInverse(J_point, J_point_pinv);
+  pseudoInverse(J_point.transpose(), J_point_transpose_pinv);
+
+  
+  // Eigen::MatrixXd pinv_term;
+  // pseudoInverse(J_point * (Eigen::MatrixXd::Identity(7, 7) - jacobian_pinv * jacobian), pinv_term);
 
 
   Eigen::VectorXd dX_o_rot(6), desired_X_o(6);
   Eigen::Vector3d dX_o, r, O_X_vector;
 
   O_X_vector << collision_vector.head(3);
-  dX_o << (J_o * dq).head(3);
+  dX_o << (J_point * dq).head(3);
   r = O_X_vector.cross(dX_o);
 
   dX_o_rot.tail(3) << 0.0, 0.0, 0.0;
-  dX_o_rot.head(3) << cos(M_PI/2)*dX_o + sin(M_PI/2)*(r.cross(dX_o)) + (1-cos(M_PI/2))*(r.dot(dX_o))*r; 
+  dX_o_rot.head(3) << cos(M_PI*0.5)*dX_o + sin(M_PI*0.5)*(r.cross(dX_o)) + (1-cos(M_PI*0.5))*(r.dot(dX_o))*r; 
 
-  double phi = (dX_o.norm() > 0 && collision_vector.norm() != 0) ? acos( (collision_vector.transpose().dot(dX_o)) / (collision_vector.norm()*(dX_o.norm())) ) : 0.0;
+  double phi = (dX_o.norm() > 0.0 && collision_vector.norm() != 0.0) ? acos( (collision_vector.transpose().dot(dX_o)) / (collision_vector.norm()*(dX_o.norm())) ) : 0.0;
+  double v_norm_factor = exp(- 2 * dX_o.norm()); // dX_o.norm() > 0.01 ? exp(- 2 * dX_o.norm()) : 0.0; // Decrease the avoidance intensity if the magnitude of velocity is high, and vice versa
 
-  int gamma = 1e7;
-  int beta = 20;
+  int gamma = 1e7; //2e7; // 15e6
+  int beta = 20; // 40; // 30
   
   desired_X_o.tail(3) << 0.0, 0.0, 0.0;
-  desired_X_o.head(3) << gamma * dX_o_rot * phi * exp(-beta/M_PI * abs(phi));
+  desired_X_o.head(3) << v_norm_factor * gamma * dX_o_rot * phi * exp(-beta/M_PI * abs(phi));
   
-  dq_d_obstacle = pinv_term * ((desired_X_o) - J_o * jacobian_pinv * (jacobian * dq));
+  // dq_d_obstacle = pinv_term * ((desired_X_o) - J_point * jacobian_pinv * (jacobian * dq));
 
 
   // debugging
@@ -267,9 +288,36 @@ void GMMDMPCollisionAvoidanceController::update(const ros::Time& /*time*/,
   // std::cout << "r=\n " << r << std::endl;
   // std::cout << "dX_o_rot=\n " << dX_o_rot << std::endl;
   // std::cout << "phi=\n " << phi << std::endl;
-  std::cout << "desired_X_o=\n " << desired_X_o << std::endl;
-  std::cout << "dq_d_obstacle=\n " << dq_d_obstacle << std::endl;
-  std::cout << "mass*dq_d_obstacle = \n" << mass * dq_d_obstacle << std::endl;
+  // std::cout << "desired_X_o=\n " << desired_X_o << std::endl;
+
+  // std::cout << "dq_d_obstacle=\n " << dq_d_obstacle << std::endl;
+  // std::cout << "mass = \n" << mass << std::endl;
+  // std::cout << "collision_vector=\n " << collision_vector << std::endl;
+  // std::cout << "dX_o.norm()= " << dX_o.norm() << std::endl;
+  // std::cout << "frame_pose:\n" << collision_frame_pose << std::endl;
+
+  // visualizing the collision_link_frame for debugging
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = "panda_link0";
+  marker.header.stamp = ros::Time();
+  marker.id = 0;
+  marker.type = visualization_msgs::Marker::SPHERE;
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.pose.position.x = collision_frame_pose(0,3);
+  marker.pose.position.y = collision_frame_pose(1,3);
+  marker.pose.position.z = collision_frame_pose(2,3);
+  marker.pose.orientation.x = 0.0;
+  marker.pose.orientation.y = 0.0;
+  marker.pose.orientation.z = 0.0;
+  marker.pose.orientation.w = 1.0;
+  marker.scale.x = 0.05;
+  marker.scale.y = 0.2;
+  marker.scale.z = 0.05;
+  marker.color.a = 0.6; // Don't forget to set the alpha!
+  marker.color.r = 0.0;
+  marker.color.g = 1.0;
+  marker.color.b = 0.0;
+  marker_viz_pub.publish( marker );
 
   // \ debugging
 
@@ -282,13 +330,13 @@ void GMMDMPCollisionAvoidanceController::update(const ros::Time& /*time*/,
   // nullspace PD control with damping ratio = 1
   tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
                     jacobian.transpose() * jacobian_transpose_pinv) *
-                       (nullspace_stiffness_ * ((q_d_nullspace_ - q)) -
-                        (2.0 * sqrt(nullspace_stiffness_)) * (dq)); // Eigen::MatrixXd::Zero(7,1) // (q_d_nullspace_ - q)
-  tau_obstacle << (Eigen::MatrixXd::Identity(7, 7) -
-                    jacobian.transpose() * jacobian_transpose_pinv) *
-                    mass * dq_d_obstacle;
+                       (nullspace_stiffness_ * (Eigen::MatrixXd::Zero(7,1)) -
+                        (2 * sqrt(nullspace_stiffness_)) * (dq)); // Eigen::MatrixXd::Zero(7,1) // (q_d_nullspace_ - q)
+  tau_obstacle << (Eigen::MatrixXd::Identity(7,7) - J_point.transpose() * J_point_transpose_pinv) *
+                    ( nullspace_stiffness_ * (J_point.transpose()*desired_X_o - dq) ); // J_point_pinv * J_point ;- treat the calculated q_d_nullspace from steering angle as force and so, multiply it by the mass and add it to the tau_nullspace. tau_o = J^T_o * (m*q_d_nullspace)
+  // tau_obstacle << J_point.transpose() * (desired_X_o);
   // Desired torque
-  tau_d << tau_task + tau_nullspace + tau_obstacle + coriolis;
+  tau_d << tau_task + tau_obstacle + coriolis; //+ tau_nullspace
   // Saturate torque rate to avoid discontinuities
   tau_d << saturateTorqueRate(tau_d, tau_J_d);
   for (size_t i = 0; i < 7; ++i) {
@@ -311,7 +359,7 @@ void GMMDMPCollisionAvoidanceController::update(const ros::Time& /*time*/,
   // position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
   position_d_ = filter_params_ * (position_d_target_) + (1.0 - filter_params_) * position_d_;  // adding delta position
   orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
-  
+
   // Publish back the Pose of Franka for position/force feedback (haptic mapping)
   if (pose_feedback_pub_.trylock()){
     pose_feedback_pub_.msg_.pose.position.x = position_d_.x(); // 0.378316809929568 - position_d_.x()
@@ -340,10 +388,14 @@ Eigen::Matrix<double, 7, 1> GMMDMPCollisionAvoidanceController::saturateTorqueRa
   return tau_d_saturated;
 }
 
+// This callback calculates the collision_vector and identify the collision frame for obstacle avoidance controller calculations
 void GMMDMPCollisionAvoidanceController::nearCollisionCallback(const visualization_msgs::MarkerArray& markerarray)
 {
   std::lock_guard<std::mutex> collision_mutex_lock_guard(collision_mutex);
   // Eigen::Matrix<double, 6, 1> collision_vector;
+  robot_collision_point << markerarray.markers[1].pose.position.x, 
+                           markerarray.markers[1].pose.position.y,
+                           markerarray.markers[1].pose.position.z;
   collision_vector.tail(3) << 0.0, 0.0, 0.0;
   // vector from robot to <octomap> ( markers[0](environment point) - markers[1](robot point) )
   collision_vector.head(3) << markerarray.markers[0].pose.position.x - markerarray.markers[1].pose.position.x,
@@ -353,40 +405,50 @@ void GMMDMPCollisionAvoidanceController::nearCollisionCallback(const visualizati
   // collision_vector.col(0).normalize();
   // collision_vector.normalize();
   // std::cout << collision_vector << std::endl;
-
-  switch (markerarray.markers[1].ns.back())
+  
+  // collision_vector << -collision_vector ; // comment this when using <octomap>
+  switch (markerarray.markers[1].ns.back())  // [1] with <octomap> , [0] with box scene test
   {
-  case '0':
+  case '0': // panda_link0
     // std::cout << typeid(franka::Frame::kJoint1).name() << std::endl;
     collision_link_frame = franka::Frame::kJoint1;
     break;
-  case '1':
+  case '1': // panda_link1
     collision_link_frame = franka::Frame::kJoint1;
+    // std::cout << "panda_link1 : " << std::endl;
     break;
   case '2':
     collision_link_frame = franka::Frame::kJoint2;
+    // std::cout << "panda_link2 : " << std::endl;
     break;
   case '3':
-    collision_link_frame = franka::Frame::kJoint3;
+    collision_link_frame = franka::Frame::kJoint3; // TODO: DOUBLE CHECK whether this has to be 3 or 4
+    // std::cout << "panda_link3 : " << std::endl;
     break;
   case '4':
     collision_link_frame = franka::Frame::kJoint4;
+    // std::cout << "panda_link4 : " << std::endl;
     break;
   case '5':
-    collision_link_frame = franka::Frame::kJoint5;
+    collision_link_frame = franka::Frame::kJoint5; // 4 instead of 5 That is intended! (It must be 5)
+    // std::cout << "panda_link5 : " << std::endl;
     break;
   case '6':
     collision_link_frame = franka::Frame::kJoint6;
+    // std::cout << "panda_link6 : " << std::endl;
     break;
   case '7':
     collision_link_frame = franka::Frame::kJoint7;
+    // std::cout << "panda_link7 : " << std::endl;
     break;
-  case 'd':
+  case 'd': // panda_hand
     collision_link_frame = franka::Frame::kFlange;
+    // std::cout << "panda_hand : " << std::endl;
     break;
 
   default:
     collision_link_frame = franka::Frame::kEndEffector;
+    // std::cout << "anything else : " << std::endl;
     break;
   }
 }

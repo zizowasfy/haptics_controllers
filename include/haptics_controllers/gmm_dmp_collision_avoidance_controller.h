@@ -11,6 +11,7 @@
 #include <dynamic_reconfigure/server.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/Float32MultiArray.h>
+#include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <hardware_interface/joint_command_interface.h>
 #include <hardware_interface/robot_hw.h>
@@ -106,12 +107,17 @@ class GMMDMPCollisionAvoidanceController : public controller_interface::MultiInt
   std::mutex collision_mutex;
 //   Eigen::Matrix<double, 6, 1> collision_vector;
   Eigen::VectorXd collision_vector{6};
+  Eigen::Vector3d robot_collision_point;
   franka::Frame collision_link_frame;
   ros::Publisher debug_pub;
   Eigen::Matrix<double, 7, 1> dq_d_obstacle;
 
   void nearCollisionCallback(const visualization_msgs::MarkerArray& markerarray);
   // Eigen::Matrix<double, 6, 1> avoidLinkCollision(Eigen::Map<Eigen::Matrix<double, 7, 1>>& dq, Eigen::Map<Eigen::Matrix<double, 6, 7>>& J_o);
+
+  // debugging
+  ros::Publisher marker_viz_pub;
+  //\ debugging
 
 };
 
